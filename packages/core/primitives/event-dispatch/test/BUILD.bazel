@@ -1,0 +1,23 @@
+load("//devtools/tools:defaults.bzl", "karma_web_test_suite")
+load("//tools:defaults2.bzl", "ts_project")
+
+ts_project(
+    name = "browser_test_lib",
+    testonly = True,
+    srcs = glob(
+        [
+            "**/*.ts",
+        ],
+    ),
+    interop_deps = [
+        "//packages/private/testing",
+    ],
+    deps = [
+        "//packages/core/primitives/event-dispatch:event-dispatch_rjs",
+    ],
+)
+
+karma_web_test_suite(
+    name = "browser_test",
+    deps = [":browser_test_lib"],
+)

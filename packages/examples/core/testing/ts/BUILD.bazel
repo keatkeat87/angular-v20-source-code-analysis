@@ -1,0 +1,31 @@
+load("//tools:defaults.bzl", "jasmine_node_test")
+load("//tools:defaults2.bzl", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ts_project(
+    name = "fake_async_lib",
+    testonly = True,
+    srcs = [
+        "example_spec.ts",
+        "fake_async.ts",
+    ],
+    interop_deps = [
+        "//packages/core/testing",
+    ],
+)
+
+jasmine_node_test(
+    name = "test",
+    bootstrap = ["//tools/testing:node"],
+    deps = [
+        ":fake_async_lib",
+    ],
+)
+
+filegroup(
+    name = "files_for_docgen",
+    srcs = glob([
+        "**/*.ts",
+    ]),
+)

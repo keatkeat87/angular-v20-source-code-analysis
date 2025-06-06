@@ -1,0 +1,15 @@
+load("//devtools/tools:ng_project.bzl", "ng_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ng_project(
+    name = "about",
+    srcs = [
+        "about.component.ts",
+        "about.routes.ts",
+    ],
+    interop_deps = [
+        "//packages/core",
+        "//packages/router",
+    ],
+)

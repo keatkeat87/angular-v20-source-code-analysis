@@ -1,0 +1,37 @@
+load("//tools:defaults.bzl", "jasmine_node_test", "karma_web_test_suite")
+load("//tools:defaults2.bzl", "ts_project")
+
+ts_project(
+    name = "test_lib",
+    testonly = True,
+    srcs = glob([
+        "**/*.ts",
+    ]),
+    interop_deps = [
+        "//packages/core",
+        "//packages/core/testing",
+        "//packages/service-worker",
+        "//packages/service-worker/testing",
+    ],
+    deps = [
+        "//:node_modules/rxjs",
+        "//packages:types_rjs",
+        "//packages/service-worker/worker:worker_rjs",
+        "//packages/service-worker/worker/testing:testing_rjs",
+    ],
+)
+
+jasmine_node_test(
+    name = "test",
+    bootstrap = ["//tools/testing:node"],
+    deps = [
+        ":test_lib",
+    ],
+)
+
+karma_web_test_suite(
+    name = "test_web",
+    deps = [
+        ":test_lib",
+    ],
+)

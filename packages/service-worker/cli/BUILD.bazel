@@ -1,0 +1,35 @@
+load("@npm//@bazel/esbuild:index.bzl", "esbuild", "esbuild_config")
+load("//tools:defaults2.bzl", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ts_project(
+    name = "cli",
+    srcs = glob(
+        ["**/*.ts"],
+    ),
+    deps = [
+        "//packages/service-worker/config:config_rjs",
+    ],
+)
+
+esbuild_config(
+    name = "esbuild_config",
+    config_file = "esbuild.config.js",
+)
+
+esbuild(
+    name = "ngsw_config",
+    config = ":esbuild_config",
+    entry_point = ":main.ts",
+    external = [
+        "@angular/service-worker",
+    ],
+    format = "esm",
+    metafile = False,
+    platform = "node",
+    target = "node20",
+    deps = [
+        ":cli",
+    ],
+)

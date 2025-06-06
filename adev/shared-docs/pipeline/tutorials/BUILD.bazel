@@ -1,0 +1,52 @@
+load("//adev/shared-docs:defaults.bzl", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ts_project(
+    name = "editor",
+    srcs = glob(
+        [
+            "*.mts",
+        ],
+        exclude = [
+            "playground.mts",
+            "tutorial.mts",
+        ],
+    ),
+    deps = [
+        "//:node_modules/@types/node",
+        "//:node_modules/@webcontainer/api",
+        "//:node_modules/tinyglobby",
+        "//adev/shared-docs/interfaces:interfaces_rjs",
+    ],
+)
+
+ts_project(
+    name = "playground",
+    srcs = [
+        "playground.mts",
+    ],
+    visibility = [
+        "//adev/shared-docs:__subpackages__",
+    ],
+    deps = [
+        ":editor_rjs",
+        "//:node_modules/@types/node",
+        "//adev/shared-docs/interfaces:interfaces_rjs",
+    ],
+)
+
+ts_project(
+    name = "tutorials",
+    srcs = [
+        "tutorial.mts",
+    ],
+    visibility = [
+        "//adev/shared-docs:__subpackages__",
+    ],
+    deps = [
+        ":editor_rjs",
+        "//:node_modules/@types/node",
+        "//adev/shared-docs/interfaces:interfaces_rjs",
+    ],
+)

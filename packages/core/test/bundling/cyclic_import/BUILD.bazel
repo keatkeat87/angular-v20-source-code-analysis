@@ -1,0 +1,61 @@
+load("@npm//http-server:index.bzl", "http_server")
+load("//tools:defaults.bzl", "app_bundle", "jasmine_node_test")
+load("//tools:defaults2.bzl", "ng_project", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ng_project(
+    name = "cyclic_import",
+    srcs = [
+        "index.ts",
+        "trigger.ts",
+    ],
+    interop_deps = [
+        "//packages/core",
+        "//packages/platform-browser",
+    ],
+)
+
+app_bundle(
+    name = "bundle",
+    entry_point = ":index.ts",
+    deps = [
+        ":cyclic_import",
+        "//packages/core",
+        "@npm//rxjs",
+    ],
+)
+
+ts_project(
+    name = "test_lib",
+    testonly = True,
+    srcs = glob(["*_spec.ts"]),
+    interop_deps = [
+        "//packages/compiler",
+        "//packages/core/testing",
+        "//packages/private/testing",
+    ],
+    deps = [
+        "//:node_modules/@bazel/runfiles",
+    ],
+)
+
+jasmine_node_test(
+    name = "test",
+    data = [
+        ":bundle.debug.min.js",
+        ":bundle.js",
+        ":bundle.min.js",
+        ":bundle.min.js.br",
+    ],
+    deps = [":test_lib"],
+)
+
+http_server(
+    name = "devserver",
+    data = [
+        "index.html",
+        ":bundle.debug.min.js",
+        ":bundle.min.js",
+    ],
+)

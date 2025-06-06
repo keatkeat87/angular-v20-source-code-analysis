@@ -1,0 +1,30 @@
+load("//adev/shared-docs:defaults.bzl", "ts_project")
+
+package(default_visibility = ["//visibility:private"])
+
+ts_project(
+    name = "testing",
+    srcs = [
+        "index.ts",
+    ],
+    interop_deps = [
+        ":lib",
+    ],
+    visibility = ["//adev/shared-docs:__subpackages__"],
+)
+
+ts_project(
+    name = "lib",
+    srcs = glob(
+        ["*.ts"],
+        exclude = [
+            "index.ts",
+        ],
+    ),
+    interop_deps = [
+        "//packages/core",
+    ],
+    deps = [
+        "//:node_modules/@webcontainer/api",
+    ],
+)

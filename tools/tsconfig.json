@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "esModuleInterop": true,
+    "sourceMap": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "types": ["node"],
+    "paths": {
+      "zone.js": ["../packages/zone.js/lib/zone"],
+      "zone.js/*": ["../packages/zone.js/*"],
+      "@angular/*": ["../packages/*/index"],
+    }
+  }
+}

@@ -1,0 +1,31 @@
+load("//tools:defaults.bzl", "ng_package")
+load("//tools:defaults2.bzl", "ng_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ng_project(
+    name = "angular-in-memory-web-api",
+    srcs = glob(
+        [
+            "*.ts",
+            "src/**/*.ts",
+        ],
+    ),
+    interop_deps = [
+        "//packages/common",
+        "//packages/common/http",
+    ],
+    module_name = "angular-in-memory-web-api",
+    deps = [
+        "//:node_modules/rxjs",
+        "//packages/core:core_rjs",
+    ],
+)
+
+ng_package(
+    name = "npm_package",
+    srcs = ["package.json"],
+    deps = [
+        ":angular-in-memory-web-api",
+    ],
+)

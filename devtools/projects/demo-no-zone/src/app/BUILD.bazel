@@ -1,0 +1,19 @@
+load("//devtools/tools:ng_project.bzl", "ng_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ng_project(
+    name = "app",
+    srcs = glob(
+        include = ["*.ts"],
+    ),
+    angular_assets = ["app.component.html"],
+    interop_deps = [
+        "//packages/common",
+        "//packages/core",
+        "//packages/platform-browser",
+    ],
+    deps = [
+        "//:node_modules/rxjs",
+    ],
+)

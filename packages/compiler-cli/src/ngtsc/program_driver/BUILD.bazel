@@ -1,0 +1,19 @@
+load("//tools:defaults2.bzl", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ts_project(
+    name = "program_driver",
+    srcs = ["index.ts"] + glob([
+        "src/*.ts",
+    ]),
+    interop_deps = [
+        "//packages/compiler-cli/src/ngtsc/file_system",
+        "//packages/compiler-cli/src/ngtsc/shims",
+        "//packages/compiler-cli/src/ngtsc/util",
+    ],
+    module_name = "@angular/compiler-cli/src/ngtsc/program_driver",
+    deps = [
+        "//:node_modules/typescript",
+    ],
+)

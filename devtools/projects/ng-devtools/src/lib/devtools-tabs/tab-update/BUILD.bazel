@@ -1,0 +1,16 @@
+load("//devtools/tools:typescript.bzl", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ts_project(
+    name = "tab-update",
+    srcs = [
+        "index.ts",
+    ],
+    interop_deps = [
+        "//packages/core",
+    ],
+    deps = [
+        "//:node_modules/rxjs",
+    ],
+)

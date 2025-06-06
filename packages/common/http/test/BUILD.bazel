@@ -1,0 +1,41 @@
+load("//tools:defaults.bzl", "jasmine_node_test", "karma_web_test_suite")
+load("//tools:defaults2.bzl", "ts_project")
+
+ts_project(
+    name = "test_lib",
+    testonly = True,
+    srcs = glob(
+        ["**/*.ts"],
+    ),
+    interop_deps = [
+        "//packages:types",
+        "//packages/core",
+        "//packages/core/testing",
+        "//packages/private/testing",
+    ],
+    # Visible to //:saucelabs_unit_tests_poc target
+    visibility = ["//:__pkg__"],
+    deps = [
+        "//:node_modules/rxjs",
+        "//packages/common:common_rjs",
+        "//packages/common/http:http_rjs",
+        "//packages/common/http/testing:testing_rjs",
+    ],
+)
+
+jasmine_node_test(
+    name = "test",
+    bootstrap = ["//tools/testing:node"],
+    flaky = True,  # TODO: figure out why one of the transferCache tests is flaky
+    deps = [
+        ":test_lib",
+    ],
+)
+
+karma_web_test_suite(
+    name = "test_web",
+    flaky = True,  # TODO: figure out why one of the transferCache tests is flaky
+    deps = [
+        ":test_lib",
+    ],
+)

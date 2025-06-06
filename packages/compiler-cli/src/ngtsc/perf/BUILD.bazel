@@ -1,0 +1,17 @@
+load("//tools:defaults2.bzl", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ts_project(
+    name = "perf",
+    srcs = ["index.ts"] + glob([
+        "src/*.ts",
+    ]),
+    interop_deps = [
+        "//packages:types",
+    ],
+    deps = [
+        "//:node_modules/@types/node",
+        "//:node_modules/typescript",
+    ],
+)

@@ -1,0 +1,91 @@
+load("//tools:defaults.bzl", "esbuild", "http_server", "jasmine_node_test", "protractor_web_test_suite")
+load("//tools:defaults2.bzl", "ng_project", "ts_project")
+
+package(default_visibility = ["//visibility:public"])
+
+ng_project(
+    name = "core_examples",
+    srcs = glob(
+        ["**/*.ts"],
+        exclude = [
+            "**/*_spec.ts",
+            "**/*_howto.ts",
+        ],
+    ),
+    interop_deps = [
+        "//packages/platform-browser",
+        "//packages/platform-browser/animations",
+        "//packages/zone.js/lib",
+    ],
+    deps = [
+        "//:node_modules/rxjs",
+        "//packages/animations:animations_rjs",
+        "//packages/core:core_rjs",
+        "//packages/forms:forms_rjs",
+        "//packages/router:router_rjs",
+    ],
+)
+
+ts_project(
+    name = "core_tests_lib",
+    testonly = True,
+    srcs = glob(
+        ["**/*_spec.ts"],
+        exclude = ["**/e2e_test/*"],
+    ),
+    deps = [
+        "//packages/core:core_rjs",
+        "//packages/core/testing:testing_rjs",
+    ],
+)
+
+ts_project(
+    name = "core_e2e_tests_lib",
+    testonly = True,
+    srcs = glob(["**/e2e_test/*_spec.ts"]),
+    tsconfig = "//packages/examples:tsconfig_e2e",
+    deps = [
+        "//:node_modules/@types/jasminewd2",
+        "//:node_modules/protractor",
+        "//packages/examples/test-utils:test-utils_rjs",
+    ],
+)
+
+esbuild(
+    name = "app_bundle",
+    entry_point = ":main.ts",
+    deps = [":core_examples"],
+)
+
+http_server(
+    name = "devserver",
+    srcs = ["//packages/examples:index.html"],
+    additional_root_paths = ["angular/packages/examples"],
+    deps = [":app_bundle"],
+)
+
+protractor_web_test_suite(
+    name = "protractor_tests",
+    on_prepare = ":start-server.js",
+    server = ":devserver",
+    deps = [
+        ":core_e2e_tests_lib",
+        "@npm//selenium-webdriver",
+    ],
+)
+
+jasmine_node_test(
+    name = "test",
+    bootstrap = ["//tools/testing:node"],
+    deps = [
+        ":core_tests_lib",
+        "//packages/examples/core/di/ts/forward_ref:forward_ref_tests_lib",
+    ],
+)
+
+filegroup(
+    name = "files_for_docgen",
+    srcs = glob([
+        "**/*.ts",
+    ]),
+)

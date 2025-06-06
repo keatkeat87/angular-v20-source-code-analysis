@@ -1,0 +1,29 @@
+load("//tools:defaults.bzl", "karma_web_test_suite")
+load("//tools:defaults2.bzl", "ts_project")
+
+ts_project(
+    name = "test_lib",
+    testonly = True,
+    srcs = glob(["**/*.ts"]),
+    interop_deps = [
+        "//packages/common",
+        "//packages/common/http",
+    ],
+    # Visible to //:saucelabs_unit_tests_poc target
+    visibility = ["//:__pkg__"],
+    deps = [
+        "//:node_modules/@types/jasmine-ajax",
+        "//:node_modules/jasmine-ajax",
+        "//:node_modules/rxjs",
+        "//packages/core:core_rjs",
+        "//packages/core/testing:testing_rjs",
+        "//packages/misc/angular-in-memory-web-api:angular-in-memory-web-api_rjs",
+    ],
+)
+
+karma_web_test_suite(
+    name = "test_web",
+    deps = [
+        ":test_lib",
+    ],
+)
