@@ -131,20 +131,18 @@ const COMPUTED_NODE = /* @__PURE__ */ (() => {
       const oldValue = node.value;
       node.value = COMPUTING;
 
-      // 1. setActiveConsumer(fullNameNode)
-      //    把 fullName ReactiveNode 设置成全局 consumer 
+      // 1. before computation 要做一些 preparation
       const prevConsumer = consumerBeforeComputation(node);
       let newValue: unknown;
       let wasEqual = false;
       try {
+
         // 2. 执行 computation
         //    里面会调用 firstName, lastName getter 
         //    getter 里面会调用 producerAccessed
         //    producerAccessed 会把 firstName Reactive push 到 fullNameReactiveNode.producerNode array 里
-        //    依赖收集完成
         newValue = node.computation();
-
-        // 3. 清除全局 consumer
+     
         setActiveConsumer(null);
         wasEqual =
           oldValue !== UNSET &&
@@ -155,16 +153,17 @@ const COMPUTED_NODE = /* @__PURE__ */ (() => {
         newValue = ERRORED;
         node.error = err;
       } finally {
+        // 3. after computation 要做一些 cleaning
         consumerAfterComputation(node, prevConsumer);
       }
 
+      // 1. 如果执行完 computation 发现新值和旧值是 equal 的，那就当什么也没有发生。
       if (wasEqual) {
-        // No change to `valueVersion` - old and new values are
-        // semantically equivalent.
         node.value = oldValue;
         return;
       }
 
+      // 2. 如果有新值，那就更新缓存，并且累加 version
       node.value = newValue;
       node.version++;
     },

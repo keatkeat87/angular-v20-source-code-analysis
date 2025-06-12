@@ -40,10 +40,8 @@ import {emitEffectCreatedEvent, setInjectorProfilerContext} from '../debug/injec
  *
  * @publicApi 20.0
  */
+
 export interface EffectRef {
-  /**
-   * Shut down the effect, removing it from any upcoming scheduled executions.
-   */
   destroy(): void;
 }
 
@@ -129,10 +127,13 @@ export type EffectCleanupRegisterFn = (cleanupFn: EffectCleanupFn) => void;
  *
  * @publicApi 20.0
  */
+
 export function effect(
   effectFn: (onCleanup: EffectCleanupRegisterFn) => void,
   options?: CreateEffectOptions,
 ): EffectRef {
+
+  //#region 省略...
   ngDevMode &&
     assertNotInReactiveContext(
       effect,
@@ -149,33 +150,40 @@ export function effect(
       `The 'allowSignalWrites' flag is deprecated and no longer impacts effect() (writes are always allowed)`,
     );
   }
+  //#endregion
 
+  // 1. effect 依赖 Injector
   const injector = options?.injector ?? inject(Injector);
+  // 2. 从 injector 获取 DestroyRef，其目的是为了在 injector destroy 时，也一并 destroy 掉 effect。
   let destroyRef = options?.manualCleanup !== true ? injector.get(DestroyRef) : null;
 
   let node: EffectNode;
 
+  // 3. viewContext 跟组件有关，后面章节才会教，本篇例子中它是 null
   const viewContext = injector.get(ViewContext, null, {optional: true});
+
+  // 4. effect 依赖 ChangeDetectionScheduler class provider
   const notifier = injector.get(ChangeDetectionScheduler);
+
   if (viewContext !== null) {
-    // This effect was created in the context of a view, and will be associated with the view.
     node = createViewEffect(viewContext.view, notifier, effectFn);
     if (destroyRef instanceof NodeInjectorDestroyRef && destroyRef._lView === viewContext.view) {
-      // The effect is being created in the same view as the `DestroyRef` references, so it will be
-      // automatically destroyed without the need for an explicit `DestroyRef` registration.
       destroyRef = null;
     }
   } else {
-    // This effect was created outside the context of a view, and will be scheduled independently.
+    // 5. 创建 EffectNode (也就是创建 ReactiveNode)
     node = createRootEffect(effectFn, injector.get(EffectScheduler), notifier);
   }
   node.injector = injector;
 
   if (destroyRef !== null) {
-    // If we need to register for cleanup, do that here.
+    // 6. 监听 injector destroy，当 injector destroy 时也一并 destroy 掉 effect 
+    //    需要把 destroyRef.onDestroy 返回的 removeListener 函数保存起来
+    //    因为有可能 effect 会被 manual destroy 掉，这时就需要 removeListener
     node.onDestroyFn = destroyRef.onDestroy(() => node.destroy());
   }
 
+  // 7. 用 EffectNode 来创建 EffectRef
   const effectRef = new EffectRefImpl(node);
 
   if (ngDevMode) {
@@ -188,6 +196,7 @@ export function effect(
     }
   }
 
+  // 8. 返回 EffectRef
   return effectRef;
 }
 
@@ -213,7 +222,7 @@ export interface RootEffectNode extends EffectNode {
 }
 
 export const BASE_EFFECT_NODE: Omit<EffectNode, 'fn' | 'destroy' | 'injector' | 'notifier'> =
-  /* @__PURE__ */ (() => ({
+  (() => ({
     ...REACTIVE_NODE,
     consumerIsAlwaysLive: true,
     consumerAllowSignalWrites: true,
@@ -224,6 +233,7 @@ export const BASE_EFFECT_NODE: Omit<EffectNode, 'fn' | 'destroy' | 'injector' | 
     kind: 'effect',
     onDestroyFn: noop,
     run(this: EffectNode): void {
+      // 1. 把 EffectNode.dirty 设置成 false
       this.dirty = false;
 
       if (ngDevMode && isInNotificationPhase()) {
@@ -238,20 +248,20 @@ export const BASE_EFFECT_NODE: Omit<EffectNode, 'fn' | 'destroy' | 'injector' | 
       const registerCleanupFn: EffectCleanupRegisterFn = (cleanupFn) =>
         (this.cleanupFns ??= []).push(cleanupFn);
 
+      // 2. 开启依赖收集
       const prevNode = consumerBeforeComputation(this);
-
-      // We clear `setIsRefreshingViews` so that `markForCheck()` within the body of an effect will
-      // cause CD to reach the component in question.
       const prevRefreshingViews = setIsRefreshingViews(false);
       try {
+        // 3. 做一些清理动作，比如把上一次 callback 执行时注册的 cleanup 清掉 
         this.maybeCleanup();
+        // 4. 执行 callback
         this.fn(registerCleanupFn);
       } finally {
         setIsRefreshingViews(prevRefreshingViews);
+        // 5. 关闭依赖收集
         consumerAfterComputation(this, prevNode);
       }
     },
-
     maybeCleanup(this: EffectNode): void {
       if (!this.cleanupFns?.length) {
         return;
@@ -272,16 +282,20 @@ export const BASE_EFFECT_NODE: Omit<EffectNode, 'fn' | 'destroy' | 'injector' | 
   }))();
 
 export const ROOT_EFFECT_NODE: Omit<RootEffectNode, 'fn' | 'scheduler' | 'notifier' | 'injector'> =
-  /* @__PURE__ */ (() => ({
+    (() => ({
     ...BASE_EFFECT_NODE,
     consumerMarkedDirty(this: RootEffectNode) {
+      // 1. scheduler 是 EffectScheduler
       this.scheduler.schedule(this);
+
+      // 2. notifier 是 ChangeDetectionScheduler
       this.notifier.notify(NotificationSource.RootEffect);
     },
     destroy(this: RootEffectNode) {
       consumerDestroy(this);
       this.onDestroyFn();
       this.maybeCleanup();
+      // 把 EffectNode 从 EffectScheduler 里移除
       this.scheduler.remove(this);
     },
   }))();
@@ -325,12 +339,26 @@ export function createRootEffect(
   scheduler: EffectScheduler,
   notifier: ChangeDetectionScheduler,
 ): RootEffectNode {
+  // 1. 创建 EffectNode
   const node = Object.create(ROOT_EFFECT_NODE) as RootEffectNode;
+
+  // 2. fn 就是 effect callback
   node.fn = fn;
+
+  // 3. scheduler 是 EffectScheduler
   node.scheduler = scheduler;
+
+  // 4. notifier 是 ChangeDetectionScheduler
   node.notifier = notifier;
+
   node.zone = typeof Zone !== 'undefined' ? Zone.current : null;
+
+  // 5. 把 EffectNode 添加进 EffectScheduler
   node.scheduler.add(node);
+
+  // 6. ChangeDetectionScheduler 发布通知 
   node.notifier.notify(NotificationSource.RootEffect);
+
+  // 7. 返回 EffectNode 
   return node;
 }

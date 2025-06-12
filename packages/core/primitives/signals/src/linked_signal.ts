@@ -76,10 +76,8 @@ export function createLinkedSignal<S, D>(
   }
 
   const linkedSignalGetter = () => {
-    // Check if the value needs updating before returning it.
     producerUpdateValueVersion(node);
 
-    // Record that someone looked at this signal.
     producerAccessed(node);
 
     if (node.value === ERRORED) {
@@ -102,7 +100,11 @@ export function createLinkedSignal<S, D>(
 }
 
 export function linkedSignalSetFn<S, D>(node: LinkedSignalNode<S, D>, newValue: D) {
+
+  // 1. 先执行 producerUpdateValueVersion
   producerUpdateValueVersion(node);
+
+  // 2. 再调用 signalSetFn
   signalSetFn(node, newValue);
   producerMarkClean(node);
 }
@@ -119,6 +121,8 @@ export function linkedSignalUpdateFn<S, D>(
 // Note: Using an IIFE here to ensure that the spread assignment is not considered
 // a side-effect, ending up preserving `LINKED_SIGNAL_NODE` and `REACTIVE_NODE`.
 // TODO: remove when https://github.com/evanw/esbuild/issues/3392 is resolved.
+
+
 export const LINKED_SIGNAL_NODE: object = /* @__PURE__ */ (() => {
   return {
     ...REACTIVE_NODE,
@@ -129,35 +133,38 @@ export const LINKED_SIGNAL_NODE: object = /* @__PURE__ */ (() => {
     kind: 'linkedSignal',
 
     producerMustRecompute(node: LinkedSignalNode<unknown, unknown>): boolean {
-      // Force a recomputation if there's no current value, or if the current value is in the
-      // process of being calculated (which should throw an error).
       return node.value === UNSET || node.value === COMPUTING;
     },
 
     producerRecomputeValue(node: LinkedSignalNode<unknown, unknown>): void {
       if (node.value === COMPUTING) {
-        // Our computation somehow led to a cyclic read of itself.
         throw new Error(
           typeof ngDevMode !== 'undefined' && ngDevMode ? 'Detected cycle in computations.' : '',
         );
       }
 
+      // 1. 当前 linkedSignal 的值 (可能是上一次 set 的 value，也可能是上一次 computation 的 return value)
       const oldValue = node.value;
       node.value = COMPUTING;
 
       const prevConsumer = consumerBeforeComputation(node);
       let newValue: unknown;
       try {
+        // 2. 执行 options.source 函数，获取最新的 source，作为 computation 参数一 source
         const newSourceValue = node.source();
+
+        // 3. 制作 computation 参数二 previous
         const prev =
-          oldValue === UNSET || oldValue === ERRORED
-            ? undefined
+          oldValue === UNSET || oldValue === ERRORED 
+            ? undefined // 第一次 previous 是 undefined
             : {
-                source: node.sourceValue,
-                value: oldValue,
+                source: node.sourceValue, // 上一次的缓存的 source
+                value: oldValue, // 当前 linkedSignal 的值
               };
+
+        // 4. 执行 computation
         newValue = node.computation(newSourceValue, prev);
-        node.sourceValue = newSourceValue;
+        node.sourceValue = newSourceValue; // 缓存 source for 下一次
       } catch (err) {
         newValue = ERRORED;
         node.error = err;
@@ -166,8 +173,6 @@ export const LINKED_SIGNAL_NODE: object = /* @__PURE__ */ (() => {
       }
 
       if (oldValue !== UNSET && newValue !== ERRORED && node.equal(oldValue, newValue)) {
-        // No change to `valueVersion` - old and new values are
-        // semantically equivalent.
         node.value = oldValue;
         return;
       }

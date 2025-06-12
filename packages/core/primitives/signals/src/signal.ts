@@ -143,7 +143,7 @@ function signalValueChanged<T>(node: SignalNode<T>): void {
   // 2. 累加全局 version，全局 version 叫 epoch
   producerIncrementEpoch();
 
-  // 3. producer 和 consumer 是很重要的概念，下面会讲解，这里先跳过
+  // 3. 通知 consumer (e.g. EffectNode)
   producerNotifyConsumers(node);
   postSignalSetFn?.(node);
 }

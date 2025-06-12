@@ -16,6 +16,7 @@ type Version = number & {__brand: 'Version'};
 let epoch: Version = 1 as Version;
 export type ReactiveHookFn = (node: ReactiveNode) => void;
 let postProducerCreatedFn: ReactiveHookFn | null = null;
+
 export const SIGNAL: unique symbol = /* @__PURE__ */ Symbol('SIGNAL');
 
 export function setActiveConsumer(consumer: ReactiveNode | null): ReactiveNode | null {
@@ -131,9 +132,15 @@ export function producerAccessed(node: ReactiveNode): void {
 
   assertConsumerNode(activeConsumer);
 
+  // b1. activeConsumer.producerNode[idx] 是上一次的依赖 firstName Reactive
+  //     node 是这一次的的依赖 lastName Reactive 
+  //     它们不相等所以会进入 if 内
   if (idx < activeConsumer.producerNode.length && activeConsumer.producerNode[idx] !== node) {
+    // b2. 如果 activeConsumer 是双向才需要，此时是 EffectNode 所以需要
     if (consumerIsLive(activeConsumer)) {
+      // b3. 把 firstNameReactive 拿出来
       const staleProducer = activeConsumer.producerNode[idx];
+      // b4. 把 firstNameReactiveNode.liveConsumerNode 里的 EffectNode 移除掉
       producerRemoveLiveConsumerAtIndex(staleProducer, activeConsumer.producerIndexOfThis[idx]);
     }
   }
@@ -144,8 +151,14 @@ export function producerAccessed(node: ReactiveNode): void {
   if (activeConsumer.producerNode[idx] !== node) {
     // 3. 那就把 firstName ReactiveNode push 进去 fullNameReactiveNode.producerNode 里
     //    这就是调用 firstName() 后为什么 fullNameReactiveNode.producerNode array 会有 firstName ReactiveNode 的原因
+
+    // a1. activeConsumer 是 EffectNode
+    //    node 是 firstName ReactiveNode 
+    //    effect 和 computed 一样，都是把依赖 (a.k.a producer) push 进 ReactiveNode.producerNode 里
     activeConsumer.producerNode[idx] = node;
 
+    // a2. effect 比 computed 多了一个环节
+    //    EffectNode 是 live consumer 所以会执行 producerAddLiveConsumer
     activeConsumer.producerIndexOfThis[idx] = consumerIsLive(activeConsumer)
       ? producerAddLiveConsumer(node, activeConsumer, idx)
       : 0;
@@ -188,7 +201,7 @@ export function producerUpdateValueVersion(node: ReactiveNode): void {
 
   // 4. 如果上面都没有中断，
   //    这里执行 producerRecomputeValue 
-  //    里面会 computation，把返回值放入 node.value (这里 node 是 fullName ReactiveNode)
+  //    里面会执行 computation，把返回值放入 node.value (这里 node 是 fullName ReactiveNode)
   //    最后还会累加 node.version
   node.producerRecomputeValue(node);
   producerMarkClean(node);
@@ -197,17 +210,19 @@ export function producerUpdateValueVersion(node: ReactiveNode): void {
 /**
  * Propagate a dirty notification to live consumers of this producer.
  */
+
 export function producerNotifyConsumers(node: ReactiveNode): void {
   if (node.liveConsumerNode === undefined) {
     return;
   }
 
-  // Prevent signal reads when we're updating the graph
   const prev = inNotificationPhase;
   inNotificationPhase = true;
   try {
+    // 1. for loop 收集的依赖 (e.g. EffectNode)
     for (const consumer of node.liveConsumerNode) {
       if (!consumer.dirty) {
+        // 2. 把这些依赖 mark dirty 
         consumerMarkDirty(consumer);
       }
     }
@@ -225,8 +240,10 @@ export function producerUpdatesAllowed(): boolean {
 }
 
 export function consumerMarkDirty(node: ReactiveNode): void {
+  // 1. set EffectNode.dirty = true
   node.dirty = true;
-  producerNotifyConsumers(node);
+  producerNotifyConsumers(node); // 这是递归，下面会再讲解
+  // 2. 调用 EffectNode.consumerMarkedDirty
   node.consumerMarkedDirty?.(node);
 }
 
@@ -241,8 +258,11 @@ export function producerMarkClean(node: ReactiveNode): void {
  * Must be called by subclasses which represent reactive computations, before those computations
  * begin.
  */
+
 export function consumerBeforeComputation(node: ReactiveNode | null): ReactiveNode | null {
+  // 1. 把 producer index 设置成 0 (重置的意思)
   node && (node.nextProducerIndex = 0);
+  // 2. 设置全局 consumer
   return setActiveConsumer(node);
 }
 
@@ -252,10 +272,12 @@ export function consumerBeforeComputation(node: ReactiveNode | null): ReactiveNo
  * Must be called by subclasses which represent reactive computations, after those computations
  * have finished.
  */
+
 export function consumerAfterComputation(
   node: ReactiveNode | null,
   prevConsumer: ReactiveNode | null,
 ): void {
+  // 1. 还原全局 consumer
   setActiveConsumer(prevConsumer);
 
   if (
@@ -267,17 +289,17 @@ export function consumerAfterComputation(
     return;
   }
 
+  // 1. 如果是双向 (e.g. EffectNode) 就进入
+  //    此时 node 是 EffectNode
   if (consumerIsLive(node)) {
-    // For live consumers, we need to remove the producer -> consumer edge for any stale producers
-    // which weren't dependencies after the recomputation.
+    // 2. for loop 多余的依赖
     for (let i = node.nextProducerIndex; i < node.producerNode.length; i++) {
+      // 3. 把依赖 ReactiveNode.liveConsumerNode 里的 EffectNode 移除掉
       producerRemoveLiveConsumerAtIndex(node.producerNode[i], node.producerIndexOfThis[i]);
     }
   }
 
-  // Truncate the producer tracking arrays.
-  // Perf note: this is essentially truncating the length to `node.nextProducerIndex`, but
-  // benchmarking has shown that individual pop operations are faster.
+  // 2. 清除多余的 producers
   while (node.producerNode.length > node.nextProducerIndex) {
     node.producerNode.pop();
     node.producerLastReadVersion.pop();
@@ -358,19 +380,25 @@ export function consumerDestroy(node: ReactiveNode): void {
  * Note that this operation is potentially transitive. If this node becomes live, then it becomes
  * a live consumer of all of its current producers.
  */
+
 function producerAddLiveConsumer(
   node: ReactiveNode,
   consumer: ReactiveNode,
   indexOfThis: number,
 ): number {
   assertProducerNode(node);
+
   if (node.liveConsumerNode.length === 0 && isConsumerNode(node)) {
-    // When going from 0 to 1 live consumers, we become a live consumer to our producers.
     for (let i = 0; i < node.producerNode.length; i++) {
       node.producerIndexOfThis[i] = producerAddLiveConsumer(node.producerNode[i], node, i);
     }
   }
+
   node.liveConsumerIndexOfThis.push(indexOfThis);
+  // 1. node 是 firstName ReactiveNode
+  //    consumer 是 EffectNode
+  //    把 EffectNode push 进 firstNameReactiveNode.liveConsumerNode 里
+  //    liveConsumerNode 的类型是 ReactiveNode Array
   return node.liveConsumerNode.push(consumer) - 1;
 }
 
@@ -387,26 +415,18 @@ function producerRemoveLiveConsumerAtIndex(node: ReactiveNode, idx: number): voi
   }
 
   if (node.liveConsumerNode.length === 1 && isConsumerNode(node)) {
-    // When removing the last live consumer, we will no longer be live. We need to remove
-    // ourselves from our producers' tracking (which may cause consumer-producers to lose
-    // liveness as well).
     for (let i = 0; i < node.producerNode.length; i++) {
       producerRemoveLiveConsumerAtIndex(node.producerNode[i], node.producerIndexOfThis[i]);
     }
   }
 
-  // Move the last value of `liveConsumers` into `idx`. Note that if there's only a single
-  // live consumer, this is a no-op.
   const lastIdx = node.liveConsumerNode.length - 1;
   node.liveConsumerNode[idx] = node.liveConsumerNode[lastIdx];
   node.liveConsumerIndexOfThis[idx] = node.liveConsumerIndexOfThis[lastIdx];
 
-  // Truncate the array.
   node.liveConsumerNode.length--;
   node.liveConsumerIndexOfThis.length--;
 
-  // If the index is still valid, then we need to fix the index pointer from the producer to this
-  // consumer, and update it from `lastIdx` to `idx` (accounting for the move above).
   if (idx < node.liveConsumerNode.length) {
     const idxProducer = node.liveConsumerIndexOfThis[idx];
     const consumer = node.liveConsumerNode[idx];

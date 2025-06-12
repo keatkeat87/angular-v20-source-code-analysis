@@ -22,40 +22,11 @@ const EXECUTE_CALLBACK_IF_ALREADY_DESTROYED = false;
  *
  * @publicApi
  */
+
 export abstract class DestroyRef {
-  // Here the `DestroyRef` acts primarily as a DI token. There are (currently) types of objects that
-  // can be returned from the injector when asking for this token:
-  // - `NodeInjectorDestroyRef` when retrieved from a node injector;
-  // - `EnvironmentInjector` when retrieved from an environment injector
-
-  /**
-   * Registers a destroy callback in a given lifecycle scope.  Returns a cleanup function that can
-   * be invoked to unregister the callback.
-   *
-   * @usageNotes
-   * ### Example
-   * ```ts
-   * const destroyRef = inject(DestroyRef);
-   *
-   * // register a destroy callback
-   * const unregisterFn = destroyRef.onDestroy(() => doSomethingOnDestroy());
-   *
-   * // stop the destroy callback from executing if needed
-   * unregisterFn();
-   * ```
-   */
   abstract onDestroy(callback: () => void): () => void;
-
-  /**
-   * @internal
-   * @nocollapse
-   */
   static __NG_ELEMENT_ID__: () => DestroyRef = injectDestroyRef;
 
-  /**
-   * @internal
-   * @nocollapse
-   */
   static __NG_ENV_ID__: (injector: EnvironmentInjector) => DestroyRef = (injector) => injector;
 }
 

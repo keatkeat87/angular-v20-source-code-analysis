@@ -334,17 +334,11 @@ export class R3Injector extends EnvironmentInjector implements PrimitivesInjecto
     const previousInjector = setCurrentInjector(this);
     const previousInjectImplementation = setInjectImplementation(undefined);
     try {
-      // Check for the SkipSelf flag.
       if (!(flags & InternalInjectFlags.SkipSelf)) {
-        // SkipSelf isn't set, check if the record belongs to this injector.
         let record: Record<T> | undefined | null = this.records.get(token);
         if (record === undefined) {
-          // No record, but maybe the token is scoped to this injector. Look for an injectable
-          // def with a scope matching this injector.
           const def = couldBeInjectableType(token) && getInjectableDef(token);
           if (def && this.injectableDefInScope(def)) {
-            // Found an injectable def and it's scoped to this injector. Pretend as if it was here
-            // all along.
 
             if (ngDevMode) {
               runInInjectorProfilerContext(this, token as Type<T>, () => {
@@ -540,7 +534,6 @@ export class R3Injector extends EnvironmentInjector implements PrimitivesInjecto
 }
 
 function injectableDefOrInjectorDefFactory(token: ProviderToken<any>): FactoryFn<any> {
-  // Most tokens will have an injectable def directly on them, which specifies a factory directly.
   const injectableDef = getInjectableDef(token);
   const factory = injectableDef !== null ? injectableDef.factory : getFactoryDef(token);
 
