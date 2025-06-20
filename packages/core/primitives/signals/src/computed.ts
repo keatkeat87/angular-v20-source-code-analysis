@@ -56,14 +56,18 @@ export function createComputed<T>(
   }
 
   // 1. 这就是 computed getter 函数
+  // a1. 这是 fullName getter
   const computed = () => {
 
     // 2. 首先检查依赖的 producers 是否有变更
     //    如果有变更，那就重跑 computation 然后 update node.value (它就是缓存值)
-    //    没有就不会原封不动
+    //    没有就会原封不动
+    // a2. 执行 computation 收集依赖
+    //     收集结果：fullNameReactiveNode.producerNode = [firstNameReactiveNode, lastNameReactiveNode];
     producerUpdateValueVersion(node);
 
-    // 3. 和 Signal getter 一样要调用 producerAccessed (因为 computed 也可以作为其它人的 producer)
+    // 3. 和 Signal getter 一样要调用 producerAccessed (因为 computed 也可以作为其它人的 producer
+    // a3. fullName 又被 effect 依赖所以进入 producerAccessed
     producerAccessed(node);
 
     if (node.value === ERRORED) {
@@ -132,6 +136,7 @@ const COMPUTED_NODE = /* @__PURE__ */ (() => {
       node.value = COMPUTING;
 
       // 1. before computation 要做一些 preparation
+      // a1. 开启依赖收集
       const prevConsumer = consumerBeforeComputation(node);
       let newValue: unknown;
       let wasEqual = false;
@@ -141,8 +146,10 @@ const COMPUTED_NODE = /* @__PURE__ */ (() => {
         //    里面会调用 firstName, lastName getter 
         //    getter 里面会调用 producerAccessed
         //    producerAccessed 会把 firstName Reactive push 到 fullNameReactiveNode.producerNode array 里
+        // a2. 执行 computation (without await)
         newValue = node.computation();
-     
+        
+        // a3. 结束依赖收集
         setActiveConsumer(null);
         wasEqual =
           oldValue !== UNSET &&

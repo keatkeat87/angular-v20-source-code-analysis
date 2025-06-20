@@ -133,7 +133,6 @@ export function effect(
   options?: CreateEffectOptions,
 ): EffectRef {
 
-  //#region 省略...
   ngDevMode &&
     assertNotInReactiveContext(
       effect,
@@ -150,7 +149,6 @@ export function effect(
       `The 'allowSignalWrites' flag is deprecated and no longer impacts effect() (writes are always allowed)`,
     );
   }
-  //#endregion
 
   // 1. effect 依赖 Injector
   const injector = options?.injector ?? inject(Injector);
@@ -249,15 +247,18 @@ export const BASE_EFFECT_NODE: Omit<EffectNode, 'fn' | 'destroy' | 'injector' | 
         (this.cleanupFns ??= []).push(cleanupFn);
 
       // 2. 开启依赖收集
+      // a1. 开始依赖收集
       const prevNode = consumerBeforeComputation(this);
       const prevRefreshingViews = setIsRefreshingViews(false);
       try {
         // 3. 做一些清理动作，比如把上一次 callback 执行时注册的 cleanup 清掉 
         this.maybeCleanup();
         // 4. 执行 callback
+        // a2. 执行 callback (without await)
         this.fn(registerCleanupFn);
       } finally {
         setIsRefreshingViews(prevRefreshingViews);
+        // a3. 结束依赖收集
         // 5. 关闭依赖收集
         consumerAfterComputation(this, prevNode);
       }

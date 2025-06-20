@@ -103,10 +103,12 @@ export function signalSetFn<T>(node: SignalNode<T>, newValue: T) {
     throwInvalidWriteToSignalError(node);
   }
 
+  // 1. 如果新旧值相同的话，直接 skip 掉后续所有操作，连 value 都不会改变哦
   if (!node.equal(node.value, newValue)) {
+    // 2. update ReactiveNode value
     node.value = newValue;
 
-    // 1. check it out
+    // 3. check it out
     signalValueChanged(node);
   }
 }

@@ -63,21 +63,31 @@ export function resource<T, R>(
  *
  * @experimental 19.0
  */
+
 export function resource<T, R>(options: ResourceOptions<T, R>): ResourceRef<T | undefined>;
 export function resource<T, R>(options: ResourceOptions<T, R>): ResourceRef<T | undefined> {
   if (ngDevMode && !options?.injector) {
     assertInInjectionContext(resource);
   }
 
+  // 1. params 以前 (v20 之前) 叫 request，后来 rename 成 params
+  //    这里是向后兼容代码
   const oldNameForParams = (
     options as ResourceOptions<T, R> & {request: ResourceOptions<T, R>['params']}
   ).request;
+
+  // 2. 如果没有提供 options.params，这里会补一个 () => null 作为 default
   const params = (options.params ?? oldNameForParams ?? (() => null)) as () => R;
+
+  // 3. 实例化 ResourceImpl 并 return 它
   return new ResourceImpl<T | undefined, R>(
     params,
+    // 4. options 可以选择提供 loader 或 stream 其中一个
+    //    这里 getLoader 会统一它们，把 loader 强转成 stream，方便后续统一调用方式
     getLoader(options),
     options.defaultValue,
     options.equal ? wrapEqualityFn(options.equal) : undefined,
+    // 5. resource 内部会使用 effect，所以需要 injector
     options.injector ?? inject(Injector),
     RESOURCE_VALUE_THROWS_ERRORS_DEFAULT,
   );
@@ -106,34 +116,41 @@ type WrappedRequest = {request: unknown; reload: number};
 /**
  * Base class which implements `.value` as a `WritableSignal` by delegating `.set` and `.update`.
  */
+
 abstract class BaseWritableResource<T> implements WritableResource<T> {
+
   readonly value: WritableSignal<T>;
   abstract readonly status: Signal<ResourceStatus>;
   abstract readonly error: Signal<Error | undefined>;
-
   abstract reload(): boolean;
 
+  // 1. value 是一个用 computed 创建的 Signal 对象
   constructor(value: Signal<T>) {
+    // 2. 它被用作 Resource.value
     this.value = value as WritableSignal<T>;
+    // 3. 并且扩展了 set、update 方法
+
     this.value.set = this.set.bind(this);
     this.value.update = this.update.bind(this);
+
     this.value.asReadonly = signalAsReadonlyFn;
   }
 
   abstract set(value: T): void;
 
-  private readonly isError = computed(() => this.status() === 'error');
-
   update(updateFn: (value: T) => T): void {
     this.set(updateFn(untracked(this.value)));
   }
 
+  // 1. status 是 'error' 就是 isError true
+  private readonly isError = computed(() => this.status() === 'error');
+
+  // 2. status 是 'loading' or 'reloading' 就是 isLoading true
   readonly isLoading = computed(() => this.status() === 'loading' || this.status() === 'reloading');
 
+  // 3. 没有 error 同时不是 undefined，那就是 hasValue true
+  //    null 也算 hasValue 哦，只有 undefined 才不算
   hasValue(): this is ResourceRef<Exclude<T, undefined>> {
-    // Note: we specifically read `isError()` instead of `status()` here to avoid triggering
-    // reactive consumers which read `hasValue()`. This way, if `hasValue()` is used inside of an
-    // effect, it doesn't cause the effect to rerun on every status change.
     if (this.isError()) {
       return false;
     }
@@ -149,6 +166,7 @@ abstract class BaseWritableResource<T> implements WritableResource<T> {
 /**
  * Implementation for `resource()` which uses a `linkedSignal` to manage the resource's state.
  */
+
 export class ResourceImpl<T, R> extends BaseWritableResource<T> implements ResourceRef<T> {
   private readonly pendingTasks: PendingTasks;
 
@@ -162,6 +180,7 @@ export class ResourceImpl<T, R> extends BaseWritableResource<T> implements Resou
    * imperative command.
    */
   protected readonly extRequest: WritableSignal<WrappedRequest>;
+
   private readonly effectRef: EffectRef;
 
   private pendingController: AbortController | undefined;
@@ -169,16 +188,18 @@ export class ResourceImpl<T, R> extends BaseWritableResource<T> implements Resou
   private destroyed = false;
 
   constructor(
+    // 1. request 是旧的称呼，现在改叫 params 了
     request: () => R,
+    // 2. loader / stream 被统一后叫 loaderFn
     private readonly loaderFn: ResourceStreamingLoader<T, R>,
     defaultValue: T,
     private readonly equal: ValueEqualityFn<T> | undefined,
     injector: Injector,
     throwErrorsFromValue: boolean = RESOURCE_VALUE_THROWS_ERRORS_DEFAULT,
   ) {
+    // 3. run 父类的 constructor
     super(
-      // Feed a computed signal for the value to `BaseWritableResource`, which will upgrade it to a
-      // `WritableSignal` that delegates to `ResourceImpl.set`.
+      // 4. 用 computed 创建一个 Signal 并作为父类 constructor 的参数
       computed(
         () => {
           const streamValue = this.state().stream?.();
@@ -206,18 +227,15 @@ export class ResourceImpl<T, R> extends BaseWritableResource<T> implements Resou
       ),
     );
 
-    // Extend `request()` to include a writable reload signal.
+    // 5. 把 params 和 reload 关联起来
     this.extRequest = linkedSignal({
       source: request,
       computation: (request) => ({request, reload: 0}),
     });
-
-    // The main resource state is managed in a `linkedSignal`, which allows the resource to change
-    // state instantaneously when the request signal changes.
+ 
+    // 6. 把 params, reload, value 和 status 关联起来
     this.state = linkedSignal<WrappedRequest, ResourceState<T>>({
-      // Whenever the request changes,
       source: this.extRequest,
-      // Compute the state of the resource given a change in status.
       computation: (extRequest, previous) => {
         const status = extRequest.request === undefined ? 'idle' : 'loading';
         if (!previous) {
@@ -225,14 +243,13 @@ export class ResourceImpl<T, R> extends BaseWritableResource<T> implements Resou
             extRequest,
             status,
             previousStatus: 'idle',
-            stream: undefined,
+            stream: undefined, 
           };
         } else {
           return {
             extRequest,
             status,
             previousStatus: projectStatusOfState(previous.value),
-            // If the request hasn't changed, keep the previous stream.
             stream:
               previous.value.extRequest.request === extRequest.request
                 ? previous.value.stream
@@ -242,6 +259,7 @@ export class ResourceImpl<T, R> extends BaseWritableResource<T> implements Resou
       },
     });
 
+    // 7. 调用 effect callback
     this.effectRef = effect(this.loadEffect.bind(this), {
       injector,
       manualCleanup: true,
@@ -289,13 +307,12 @@ export class ResourceImpl<T, R> extends BaseWritableResource<T> implements Resou
   }
 
   override reload(): boolean {
-    // We don't want to restart in-progress loads.
     const {status} = untracked(this.state);
     if (status === 'idle' || status === 'loading') {
       return false;
     }
 
-    // Increment the request reload to trigger the `state` linked signal to switch us to `Reload`
+    // 1. 每当执行 reload 方法时，extRequest 的 reload count 就会累加，params 则用回当前值
     this.extRequest.update(({request, reload}) => ({request, reload: reload + 1}));
     return true;
   }
@@ -315,41 +332,26 @@ export class ResourceImpl<T, R> extends BaseWritableResource<T> implements Resou
   }
 
   private async loadEffect(): Promise<void> {
+    // 1. 监听 params 和 reload，当 params 变更或 reload 时，执行 effect callback
     const extRequest = this.extRequest();
 
-    // Capture the previous status before any state transitions. Note that this is `untracked` since
-    // we do not want the effect to depend on the state of the resource, only on the request.
     const {status: currentStatus, previousStatus} = untracked(this.state);
 
     if (extRequest.request === undefined) {
-      // Nothing to load (and we should already be in a non-loading state).
       return;
     } else if (currentStatus !== 'loading') {
       // We're not in a loading or reloading state, so this loading request is stale.
       return;
     }
 
-    // Cancel any previous loading attempts.
     this.abortInProgressLoad();
 
-    // Capturing _this_ load's pending task in a local variable is important here. We may attempt to
-    // resolve it twice:
-    //
-    //  1. when the loading function promise resolves/rejects
-    //  2. when cancelling the loading operation
-    //
-    // After the loading operation is cancelled, `this.resolvePendingTask` no longer represents this
-    // particular task, but this `await` may eventually resolve/reject. Thus, when we cancel in
-    // response to (1) below, we need to cancel the locally saved task.
     let resolvePendingTask: (() => void) | undefined = (this.resolvePendingTask =
       this.pendingTasks.add());
 
     const {signal: abortSignal} = (this.pendingController = new AbortController());
 
     try {
-      // The actual loading is run through `untracked` - only the request side of `resource` is
-      // reactive. This avoids any confusion with signals tracking or not tracking depending on
-      // which side of the `await` they are.
       const stream = await untracked(() => {
         return this.loaderFn({
           params: extRequest.request as Exclude<R, undefined>,
@@ -362,8 +364,6 @@ export class ResourceImpl<T, R> extends BaseWritableResource<T> implements Resou
         } as ResourceLoaderParams<R>);
       });
 
-      // If this request has been aborted, or the current request no longer
-      // matches this load, then we should ignore this resolution.
       if (abortSignal.aborted || untracked(this.extRequest) !== extRequest) {
         return;
       }
@@ -410,14 +410,19 @@ function wrapEqualityFn<T>(equal: ValueEqualityFn<T>): ValueEqualityFn<T | undef
 }
 
 function getLoader<T, R>(options: ResourceOptions<T, R>): ResourceStreamingLoader<T, R> {
+  // 1. 如果是提供 options.stream，那就直接返回 stream
   if (isStreamingResourceOptions(options)) {
     return options.stream;
   }
 
+  // 2. 如果是提供 options.loader
+  //    那就 wrap 一层，把 loader 强转成 stream 
   return async (params) => {
     try {
+      // 3. wrap 成 Signal<ResourceStreamItem> 
       return signal({value: await options.loader(params)});
     } catch (err) {
+      // 4. wrap 成 Signal<ResourceStreamItem> 
       return signal({error: encapsulateResourceError(err)});
     }
   };

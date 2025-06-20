@@ -132,8 +132,9 @@ export function producerAccessed(node: ReactiveNode): void {
 
   assertConsumerNode(activeConsumer);
 
-  // b1. activeConsumer.producerNode[idx] 是上一次的依赖 firstName Reactive
-  //     node 是这一次的的依赖 lastName Reactive 
+  // b1. activeConsumer 是 EffectNode
+  //     EffectNode.producerNode[idx] 是上一次的依赖 firstName ReactiveNode
+  //     node 是这一次的的依赖 lastName ReactiveNode 
   //     它们不相等所以会进入 if 内
   if (idx < activeConsumer.producerNode.length && activeConsumer.producerNode[idx] !== node) {
     // b2. 如果 activeConsumer 是双向才需要，此时是 EffectNode 所以需要
@@ -158,7 +159,11 @@ export function producerAccessed(node: ReactiveNode): void {
     activeConsumer.producerNode[idx] = node;
 
     // a2. effect 比 computed 多了一个环节
-    //    EffectNode 是 live consumer 所以会执行 producerAddLiveConsumer
+    //     EffectNode 是 live consumer 所以会执行 producerAddLiveConsumer
+    // c1. activeConsumer 是 EffectNode (consumerIsAlwaysLive === true)
+    //     所以会执行 producerAddLiveConsumer
+    //     node 则是 fullNameReactiveNode
+    // d1. 此时 activeConsumer 是 fullNameReactiveNode，node 是 firstNameReactiveNode
     activeConsumer.producerIndexOfThis[idx] = consumerIsLive(activeConsumer)
       ? producerAddLiveConsumer(node, activeConsumer, idx)
       : 0;
@@ -355,16 +360,19 @@ export function consumerPollProducersForChange(node: ReactiveNode): boolean {
 /**
  * Disconnect this consumer from the graph.
  */
+
 export function consumerDestroy(node: ReactiveNode): void {
   assertConsumerNode(node);
+
+  // 1. node 是 EffectNode (consumerIsAlwaysLive === true) 所以会进入 if condition
   if (consumerIsLive(node)) {
-    // Drop all connections from the graph to this node.
+    // 2. for loop effect 的依赖 firstNameReactiveNode
     for (let i = 0; i < node.producerNode.length; i++) {
+      // 3. 把 EffectNode 从 firstNameReactiveNode.liveConsumerNode array 里删除
       producerRemoveLiveConsumerAtIndex(node.producerNode[i], node.producerIndexOfThis[i]);
     }
   }
 
-  // Truncate all the arrays to drop all connection from this node to the graph.
   node.producerNode.length =
     node.producerLastReadVersion.length =
     node.producerIndexOfThis.length =
@@ -382,14 +390,23 @@ export function consumerDestroy(node: ReactiveNode): void {
  */
 
 function producerAddLiveConsumer(
-  node: ReactiveNode,
-  consumer: ReactiveNode,
+  node: ReactiveNode,  
+  consumer: ReactiveNode,  
   indexOfThis: number,
 ): number {
   assertProducerNode(node);
 
+  // a1. node 是 fullNameReactiveNode
+  //     由于这是第一次 effect 依赖收集，所以 fullNameReactiveNode.liveConsumerNode.length 是 0
+  //     另外 isConsumerNode 函数是判断 ReactiveNode 有没有 producerNode
+  //     此时 fullNameReactiveNode.producerNode === [firstNameReactiveNode, lastNameReactiveNode]
+  //     所以 if 的两个条件都满足，可以进入
   if (node.liveConsumerNode.length === 0 && isConsumerNode(node)) {
+    // a2. for loop fullName 的 producers (firstName 和 lastName)
     for (let i = 0; i < node.producerNode.length; i++) {
+      // a3. 把 fullNameReactiveNode push 进 firstNameReactiveNode.liveConsumerNode 里
+      //     firstNameReactiveNode.liveConsumerNode = [fullNameReactiveNode]
+      //     注：这里是递归，所以它不仅仅是处理两层依赖关系，更多层也都同样处理
       node.producerIndexOfThis[i] = producerAddLiveConsumer(node.producerNode[i], node, i);
     }
   }
@@ -399,12 +416,15 @@ function producerAddLiveConsumer(
   //    consumer 是 EffectNode
   //    把 EffectNode push 进 firstNameReactiveNode.liveConsumerNode 里
   //    liveConsumerNode 的类型是 ReactiveNode Array
+  // a4. 把 EffectNode push 进 fullNameReactiveNode.liveConsumerNode 里
+  //     fullNameReactiveNode.liveConsumerNode = [EffectNode]
   return node.liveConsumerNode.push(consumer) - 1;
 }
 
 /**
  * Remove the live consumer at `idx`.
  */
+
 function producerRemoveLiveConsumerAtIndex(node: ReactiveNode, idx: number): void {
   assertProducerNode(node);
 
@@ -421,9 +441,11 @@ function producerRemoveLiveConsumerAtIndex(node: ReactiveNode, idx: number): voi
   }
 
   const lastIdx = node.liveConsumerNode.length - 1;
+  // 1. 把最后一个 ReactiveNode 搬去指定 index 做覆盖
   node.liveConsumerNode[idx] = node.liveConsumerNode[lastIdx];
   node.liveConsumerIndexOfThis[idx] = node.liveConsumerIndexOfThis[lastIdx];
 
+  // 2. 移除最后一个 ReactiveNode 
   node.liveConsumerNode.length--;
   node.liveConsumerIndexOfThis.length--;
 

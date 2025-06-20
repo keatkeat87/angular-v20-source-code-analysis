@@ -33,6 +33,7 @@ import {WritableSignal} from '../render3/reactivity/signal';
  *
  * @experimental
  */
+
 export type ResourceStatus = 'idle' | 'error' | 'loading' | 'reloading' | 'resolved' | 'local';
 
 /**
@@ -225,4 +226,5 @@ export type ResourceOptions<T, R> = PromiseResourceOptions<T, R> | StreamingReso
 /**
  * @experimental
  */
+
 export type ResourceStreamItem<T> = {value: T} | {error: Error};
